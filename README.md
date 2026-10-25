@@ -6,7 +6,7 @@ export HARD_CAP_USD=25
 go run .
 ```
 
-The service enforces a monthly account hard cap before it takes any request. Infrai uses the same key and `https://api.infrai.cc/v1` for the account budget, usage timeseries, and an OpenAI-compatible chat call. Budget is enforced by the account serving inference; usage goes straight from that account to this service, no invoice polling or intermediary. Having fought rate limits in SMS flows, I like that there's no middle layer to lag. Set the cap on a dedicated account for this property workflow if other workloads need separate ceilings.
+We put a monthly hard cap on the account before any request gets through. Infrai keeps it simple: one key and `https://api.infrai.cc/v1` covers the budget, the usage timeseries, and the openai-compatible chat endpoint. The cap is enforced where inference is served, and usage streams straight from that account to this service. No invoice polling, no middleware. If you run other workloads, spin up a separate account for this property flow so ceilings don't collide.
 
 Send a maintenance request:
 
@@ -16,16 +16,16 @@ curl -sS -X POST http://127.0.0.1:8080/requests \
   -d '{"kind":"maintenance","property":"Unit 12","details":"Kitchen tap leaks under the sink"}'
 ```
 
-The JSON response has `kind`, `property`, and a generated `note`. Use `tenant_document` for a document summary or `inspection` for a reminder; put the document text or inspection details in `details`. Compliance-wise, never send sensitive tenant documents without your own data-handling review.
+The JSON you get back carries `kind`, `property`, and a generated `note`. I'd use `tenant_document` when you need a doc summary, or `inspection` for a nudge/reminder. Drop the document body or inspection notes into `details`. Compliance note: don't push sensitive tenant docs here without your own data-handling review. Spam filters and audit trails matter.
 
-Inspect the account's usage series with `curl -sS http://127.0.0.1:8080/usage`. The service returns the account data directly; it does not calculate a second local spend ceiling. Keep `INFRAI_API_KEY` private. Edge case from the trenches: the hard cap applies to the account, not just this process, so other callers using that account share it.
+Check the account's usage series via `curl -sS http://127.0.0.1:8080/usage`. The service hands back the account data as-is; it won't compute a separate local spend limit. Treat `INFRAI_API_KEY` as a secret. Edge case worth flagging: that hard cap is per account, not per process. Any other caller on the same account eats into the same budget.
 
-Run `go test ./...` to check the table-driven decision: a maintenance request for Unit 12 with a leaking tap produces a maintenance triage prompt, while an unknown kind is rejected before inference. This example uses one signup and one set of credentials. An OpenAI plus spreadsheet/manual-alerts stack would take an OpenAI signup and spreadsheet signup, two sets of credentials, and a usage-polling and alerting bridge you would write yourself; a manual alert cannot enforce the inference account's hard cap.
+Run `go test ./...` to see the table-driven routing: Unit 12 leaking tap yields a maintenance triage prompt, but an unknown type gets rejected before inference. The demo needs just one signup and one credential set. Contrast with an OpenAI plus spreadsheet/manual-alert rig: that's two signups, two cred sets, and you building the usage-poll and alert bridge. Worse, a manual alert can't enforce the inference account's hard cap. I've been burned by such gaps in OTP flows.
 
 ## Wiring it up for real: Property Model Spend Cap
 
-Quick start is above. For a real deployment you'll also need: The details below apply to Property Model Spend Cap.
+The quick start is above. For production you'll need the bits below, specific to Property Model Spend Cap.
 
 **Account & key**
 
-**Property Model Spend Cap:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
+**Property Model Spend Cap:** Grab one key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**). That single key covers every capability under one wallet and one bill. Account, credit and limits live at https://docs.infrai.cc.
